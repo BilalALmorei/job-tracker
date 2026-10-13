@@ -1,6 +1,12 @@
 <?php
 // بدء الجلسة وقراءة رسالة النجاح مرة واحدة.
 session_start();
+// إنشاء رمز لحماية النماذج إذا لم يكن موجودًا في الجلسة.
+if (!isset($_SESSION["csrf_token"])) {
+    $_SESSION["csrf_token"] = bin2hex(random_bytes(32));
+}
+
+$csrfToken = $_SESSION["csrf_token"];
 $success = $_SESSION["success"] ?? "";
 unset($_SESSION["success"]);
 $name = "بلال";
@@ -46,6 +52,16 @@ $allowedStatuses = [
 
 // استقبال النماذج التي تضيف البيانات أو تعدلها أو تحذفها.
 if ($_SERVER["REQUEST_METHOD"] === "POST") {
+  // رفض الطلب إذا كان رمز الحماية مفقودًا أو غير مطابق للجلسة.
+    $submittedToken = $_POST["csrf_token"] ?? "";
+
+    if (
+        !is_string($submittedToken) ||
+        !hash_equals($csrfToken, $submittedToken)
+    ) {
+        http_response_code(403);
+        exit("تعذر التحقق من الطلب. ارجع إلى الصفحة وحدّثها ثم حاول مجددًا.");
+    }
     $action = $_POST["action"] ?? "";
 
     // إضافة وظيفة بعد التحقق من الحقول المطلوبة وطول النصوص.
@@ -262,6 +278,11 @@ if ($search !== "") {
     <h2>إضافة وظيفة</h2>
     <form method="post" class="add-job-form">
         <input type="hidden" name="action" value="add_job">
+<input
+    type="hidden"
+    name="csrf_token"
+    value="<?php echo htmlspecialchars($csrfToken, ENT_QUOTES, "UTF-8"); ?>"
+>
 
         <p>
             <label for="company">اسم الشركة:</label>
@@ -348,6 +369,11 @@ if ($search !== "") {
             <!-- نموذج تعديل الحالة وإرسال نص البحث للعودة إلى نتائجه. -->
             <form method="post">
                 <input type="hidden" name="action" value="update_status">
+<input
+    type="hidden"
+    name="csrf_token"
+    value="<?php echo htmlspecialchars($csrfToken, ENT_QUOTES, "UTF-8"); ?>"
+>
                 <input type="hidden" name="job_index" value="<?php echo $index; ?>">
                 <input
                     type="hidden"
@@ -373,6 +399,11 @@ if ($search !== "") {
             <!-- نموذج الحذف مع تأكيد المستخدم والاحتفاظ بنص البحث. -->
             <form method="post" onsubmit="return confirm('هل تريد حذف هذه الوظيفة؟');">
                 <input type="hidden" name="action" value="delete_job">
+<input
+    type="hidden"
+    name="csrf_token"
+    value="<?php echo htmlspecialchars($csrfToken, ENT_QUOTES, "UTF-8"); ?>"
+>
                 <input type="hidden" name="job_index" value="<?php echo $index; ?>">
                 <input
                     type="hidden"
