@@ -46,6 +46,14 @@ $allowedStatuses = [
     "مقابلة"
 ];
 
+// ربط كل حالة باسم فئة CSS ثابت.
+$statusClasses = [
+    "لم أقدم بعد" => "status-pending",
+    "قيد التجهيز" => "status-preparing",
+    "تم التقديم" => "status-applied",
+    "مقابلة" => "status-interview"
+];
+
 // استقبال النماذج التي تضيف البيانات أو تعدلها أو تحذفها.
 if ($_SERVER["REQUEST_METHOD"] === "POST") {
   // رفض الطلب إذا كان رمز الحماية مفقودًا أو غير مطابق للجلسة.
@@ -322,6 +330,41 @@ if ($search !== "") {
             width: 100%;
             box-sizing: border-box;
         }
+
+    /* إظهار حالة الطلب داخل شارة صغيرة. */
+.status-badge {
+    display: inline-block;
+    padding: 5px 10px;
+    border-radius: 20px;
+    background-color: #e5e7eb;
+    color: #374151;
+    font-size: 14px;
+    font-weight: bold;
+}
+
+    /* لم أقدم بعد: رمادي. */
+.status-pending {
+    background-color: #e5e7eb;
+    color: #374151;
+}
+
+/* قيد التجهيز: أصفر فاتح. */
+.status-preparing {
+    background-color: #fef3c7;
+    color: #92400e;
+}
+
+/* تم التقديم: أزرق فاتح. */
+.status-applied {
+    background-color: #dbeafe;
+    color: #1e40af;
+}
+
+/* مقابلة: أخضر فاتح. */
+.status-interview {
+    background-color: #dcfce7;
+    color: #166534;
+}
     </style>
 </head>
 <body>
@@ -422,6 +465,17 @@ if ($search !== "") {
 
     <!-- عرض بطاقة لكل وظيفة مع الحفاظ على مفتاحها الأصلي. -->
     <?php foreach ($filteredJobs as $index => $job): ?>
+        <?php
+// ربط كل حالة باسم فئة CSS ثابت.
+$statusClasses = [
+    "لم أقدم بعد" => "status-pending",
+    "قيد التجهيز" => "status-preparing",
+    "تم التقديم" => "status-applied",
+    "مقابلة" => "status-interview"
+];
+
+$statusClass = $statusClasses[$job["status"]] ?? "";
+?>
         <div class="job-card">
 <p>معرّف الوظيفة: <?php echo (int) $job["id"]; ?></p>
 <!-- تنسيق تاريخ الإضافة للعرض دون تغيير القيمة المحفوظة. -->
@@ -462,7 +516,13 @@ $hasValidUrl = is_string($jobUrl)
         </a>
     </p>
 <?php endif; ?>
-            <p>حالة الطلب: <?php echo htmlspecialchars($job["status"], ENT_QUOTES, "UTF-8"); ?></p>
+            <!-- عرض حالة الطلب داخل شارة قابلة للتنسيق. -->
+<p>
+    حالة الطلب:
+    <span class="status-badge <?php echo htmlspecialchars($statusClass, ENT_QUOTES, "UTF-8"); ?>">
+        <?php echo htmlspecialchars($job["status"], ENT_QUOTES, "UTF-8"); ?>
+    </span>
+</p>
 
             <!-- توضيح الخطوة التالية بحسب حالة الوظيفة. -->
             <?php if ($job["status"] === "لم أقدم بعد"): ?>
