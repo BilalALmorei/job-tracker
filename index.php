@@ -46,6 +46,13 @@ $allowedStatuses = [
     "مقابلة"
 ];
 
+// قراءة فلتر الحالة وقبول الحالات المعروفة فقط.
+$statusFilter = readText($_GET, "status_filter");
+
+if (!in_array($statusFilter, $allowedStatuses, true)) {
+    $statusFilter = "";
+}
+
 // ربط كل حالة باسم فئة CSS ثابت.
 $statusClasses = [
     "لم أقدم بعد" => "status-pending",
@@ -436,18 +443,37 @@ if ($search !== "") {
         </p>
     <?php endif; ?>
 
-    <!-- نموذج البحث يستخدم GET لأنه لا يعدل البيانات. -->
-    <form method="get">
-        <label for="search">ابحث باسم الشركة أو المسمى الوظيفي:</label>
-        <input
-            type="text"
-            id="search"
-            name="search"
-            value="<?php echo htmlspecialchars($search, ENT_QUOTES, "UTF-8"); ?>"
-        >
-        <button type="submit">بحث</button>
-        <a href="/job-tracker/">عرض جميع الوظائف</a>
-    </form>
+    <!-- البحث بالنص واختيار حالة الطلب. -->
+<form method="get">
+    <label for="search">ابحث باسم الشركة أو المسمى الوظيفي:</label>
+
+    <input
+        type="text"
+        id="search"
+        name="search"
+        value="<?php echo htmlspecialchars($search, ENT_QUOTES, "UTF-8"); ?>"
+    >
+
+    <label for="status-filter">الحالة:</label>
+
+    <select name="status_filter" id="status-filter">
+        <option value="" <?php if ($statusFilter === ""): ?>selected<?php endif; ?>>
+            جميع الحالات
+        </option>
+
+        <?php foreach ($allowedStatuses as $option): ?>
+            <option
+                value="<?php echo htmlspecialchars($option, ENT_QUOTES, "UTF-8"); ?>"
+                <?php if ($statusFilter === $option): ?>selected<?php endif; ?>
+            >
+                <?php echo htmlspecialchars($option, ENT_QUOTES, "UTF-8"); ?>
+            </option>
+        <?php endforeach; ?>
+    </select>
+
+    <button type="submit">بحث</button>
+    <a href="/job-tracker/">عرض جميع الوظائف</a>
+</form>
 
     <!-- عدد نتائج البحث مقارنة بعدد الوظائف الكلي. -->
     <h2>قائمة الوظائف</h2>
