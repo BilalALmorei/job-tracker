@@ -9,6 +9,7 @@ A beginner PHP project for tracking job applications.
 - Delete a job with a confirmation prompt.
 - Search by company name or job title.
 - Display success and validation messages.
+- Optionally save and open a job advertisement URL.
 
 ## Technologies
 
@@ -17,6 +18,8 @@ A beginner PHP project for tracking job applications.
 - CSS
 - JavaScript
 - PHP Sessions
+- MariaDB / MySQL
+- PDO with prepared statements
 
 ## Run locally
 
@@ -50,9 +53,3 @@ PHP sessions are used for CSRF protection and one-time success messages.
 Built step by step with AI-assisted guidance.
 I implemented and manually tested adding, updating, deleting,
 searching, and validating job entries.
-
-
-## Technologies   
-
-- MariaDB / MySQL
-- PDO with prepared statements
