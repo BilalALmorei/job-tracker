@@ -31,12 +31,18 @@ A beginner PHP project for tracking job applications.
 3. Start Apache from the XAMPP Control Panel.
 4. Open `http://localhost/job-tracker/` in your browser.
 
+
+
+## Data storage
+
+Jobs are stored in a MySQL-compatible database.
+PHP sessions are used for CSRF protection and one-time success messages.
+
+
 ## Current limitations
 
-- Job data is stored temporarily in PHP sessions.
-- Database connection is configured, but the main application
-  still stores jobs in PHP sessions.
 - No user accounts yet.
+- All visitors to the same installation share the same job list.
 - This is a learning project and is not ready for public deployment.
 
 ## Learning context
@@ -44,3 +50,9 @@ A beginner PHP project for tracking job applications.
 Built step by step with AI-assisted guidance.
 I implemented and manually tested adding, updating, deleting,
 searching, and validating job entries.
+
+
+## Technologies   
+
+- MariaDB / MySQL
+- PDO with prepared statements

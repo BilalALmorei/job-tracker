@@ -13,30 +13,16 @@ $success = $_SESSION["success"] ?? "";
 unset($_SESSION["success"]);
 $name = "بلال";
 
-// بيانات تجريبية تظهر عند بدء جلسة جديدة فقط.
-$jobs = [
-    [
-        "company" => "شركة التدريب",
-        "title" => "مطور ويب مبتدئ",
-        "status" => "قيد التجهيز"
-    ],
-    [
-        "company" => "شركة تجريبية ثانية",
-        "title" => "مطور PHP مبتدئ",
-        "status" => "لم أقدم بعد"
-    ],
-    [
-        "company" => "شركة تجريبية ثالثة",
-        "title" => "مطور Python مبتدئ",
-        "status" => "مقابلة"
-    ]
-];
+// قراءة الوظائف من قاعدة البيانات قبل معالجة الطلبات.
+$statement = $pdo->query(
+    "SELECT id, company, title, status, created_at
+     FROM jobs
+     ORDER BY id DESC"
+);
 
-// حفظ القائمة الأولية عند الحاجة، ثم قراءة قائمة الجلسة الحالية.
-if (!isset($_SESSION["jobs"])) {
-    $_SESSION["jobs"] = $jobs;
-}
-$jobs = $_SESSION["jobs"];
+$jobs = $statement->fetchAll();
+// استخدام معرّف قاعدة البيانات كمفتاح لكل وظيفة.
+$jobs = array_column($jobs, null, "id");
 
 // إعداد رسالة الخطأ وحقول الإضافة وقراءة نص البحث من العنوان.
 $error = "";
@@ -79,13 +65,28 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
         ) {
             $error = "اسم الشركة يجب ألا يتجاوز 100 حرف، والمسمى الوظيفي 150 حرفًا.";
         } else {
+          
+    // حفظ الوظيفة الجديدة في قاعدة البيانات.
+    $statement = $pdo->prepare(
+        "INSERT INTO jobs (company, title, status)
+         VALUES (:company, :title, :status)"
+    );
+
+    $statement->execute([
+        "company" => $company,
+        "title" => $title,
+        "status" => "لم أقدم بعد"
+    ]);
+
+    // إبقاء الإضافة للجلسة مؤقتًا أثناء نقل التطبيق.
             $jobs[] = [
+                "id" => (int) $pdo->lastInsertId(),
                 "company" => $company,
                 "title" => $title,
                 "status" => "لم أقدم بعد"
             ];
 
-            $_SESSION["jobs"] = $jobs;
+            
             $_SESSION["success"] = "تمت إضافة الوظيفة بنجاح.";
 
             // العودة بطلب جديد لمنع تكرار الإضافة عند تحديث الصفحة.
@@ -108,8 +109,21 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
         ) {
             $error = "الوظيفة أو الحالة غير صحيحة.";
         } else {
+            // تعديل حالة الصف المرتبط بالبطاقة في قاعدة البيانات.
+if (isset($jobs[$index]["id"])) {
+    $statement = $pdo->prepare(
+        "UPDATE jobs
+         SET status = :status
+         WHERE id = :id"
+    );
+
+    $statement->execute([
+        "status" => $status,
+        "id" => $jobs[$index]["id"]
+    ]);
+}
             $jobs[$index]["status"] = $status;
-            $_SESSION["jobs"] = $jobs;
+            
             $_SESSION["success"] = "تم تحديث حالة الوظيفة بنجاح.";
 
             // الاحتفاظ بنص البحث عند العودة بعد تعديل الحالة.
@@ -132,9 +146,19 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
         if ($index === false || !isset($jobs[$index])) {
             $error = "الوظيفة غير موجودة.";
         } else {
+            // حذف الصف المرتبط بالبطاقة من قاعدة البيانات.
+if (isset($jobs[$index]["id"])) {
+    $statement = $pdo->prepare(
+        "DELETE FROM jobs WHERE id = :id"
+    );
+
+    $statement->execute([
+        "id" => $jobs[$index]["id"]
+    ]);
+}
             unset($jobs[$index]);
-            $jobs = array_values($jobs);
-            $_SESSION["jobs"] = $jobs;
+           
+            
             $_SESSION["success"] = "تم حذف الوظيفة بنجاح.";
 
             // الاحتفاظ بنص البحث عند العودة بعد الحذف.
@@ -150,6 +174,15 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
         $error = "العملية غير معروفة.";
     }
 }
+
+// قراءة الوظائف المحفوظة في قاعدة البيانات.
+$statement = $pdo->query(
+    "SELECT id, company, title, status, created_at
+     FROM jobs
+     ORDER BY id DESC"
+);
+
+$databaseJobs = $statement->fetchAll();
 
 // تصفية الوظائف بالبحث مع إبقاء مفاتيحها الأصلية للتعديل والحذف.
 $filteredJobs = $jobs;
@@ -171,6 +204,8 @@ if ($search !== "") {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>متتبع طلبات الوظائف</title>
+
+
 
     <!-- تنسيق الصفحة والبطاقات والنماذج والرسائل. -->
     <style>
@@ -350,7 +385,10 @@ if ($search !== "") {
     <!-- عرض بطاقة لكل وظيفة مع الحفاظ على مفتاحها الأصلي. -->
     <?php foreach ($filteredJobs as $index => $job): ?>
         <div class="job-card">
-            <p>رقم الوظيفة: <?php echo $index + 1; ?></p>
+<p>معرّف الوظيفة: <?php echo (int) $job["id"]; ?></p>
+<?php if (isset($job["id"])): ?>
+ 
+<?php endif; ?>
             <h3><?php echo htmlspecialchars($job["company"], ENT_QUOTES, "UTF-8"); ?></h3>
             <p>المسمى الوظيفي: <?php echo htmlspecialchars($job["title"], ENT_QUOTES, "UTF-8"); ?></p>
             <p>حالة الطلب: <?php echo htmlspecialchars($job["status"], ENT_QUOTES, "UTF-8"); ?></p>
@@ -376,7 +414,7 @@ if ($search !== "") {
     name="csrf_token"
     value="<?php echo htmlspecialchars($csrfToken, ENT_QUOTES, "UTF-8"); ?>"
 >
-                <input type="hidden" name="job_index" value="<?php echo $index; ?>">
+               <input type="hidden" name="job_index" value="<?php echo (int) $job["id"]; ?>">
                 <input
                     type="hidden"
                     name="search"
@@ -406,7 +444,7 @@ if ($search !== "") {
     name="csrf_token"
     value="<?php echo htmlspecialchars($csrfToken, ENT_QUOTES, "UTF-8"); ?>"
 >
-                <input type="hidden" name="job_index" value="<?php echo $index; ?>">
+               <input type="hidden" name="job_index" value="<?php echo (int) $job["id"]; ?>">
                 <input
                     type="hidden"
                     name="search"
