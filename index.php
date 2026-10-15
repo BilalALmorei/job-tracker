@@ -1,6 +1,8 @@
 <?php
 // بدء الجلسة وقراءة رسالة النجاح مرة واحدة.
 session_start();
+// تحميل الاتصال بقاعدة البيانات.
+require __DIR__ . "/db.php";
 // إنشاء رمز لحماية النماذج إذا لم يكن موجودًا في الجلسة.
 if (!isset($_SESSION["csrf_token"])) {
     $_SESSION["csrf_token"] = bin2hex(random_bytes(32));
