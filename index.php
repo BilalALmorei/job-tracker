@@ -1,36 +1,45 @@
 <?php
-// بدء الجلسة وقراءة رسالة النجاح مرة واحدة.
+// بدء الجلسة لاستخدام رمز الحماية ورسائل النجاح فقط.
 session_start();
-// تحميل الاتصال بقاعدة البيانات.
+
+// تحميل اتصال قاعدة البيانات من الملف المحلي المستبعد من Git.
 require __DIR__ . "/db.php";
-// إنشاء رمز لحماية النماذج إذا لم يكن موجودًا في الجلسة.
+
+// قراءة قيمة نصية بأمان ورفض القيم المرسلة كمصفوفات بدل النصوص.
+function readText(array $input, string $key): string
+{
+    $value = $input[$key] ?? "";
+    return is_string($value) ? trim($value) : "";
+}
+
+// العودة إلى الصفحة بعد النجاح، مع الاحتفاظ بالبحث عند التعديل والحذف.
+function redirectToJobs(string $search = ""): void
+{
+    $url = "/job-tracker/";
+    if ($search !== "") {
+        $url .= "?search=" . rawurlencode($search);
+    }
+    header("Location: " . $url);
+    exit;
+}
+
+// إنشاء رمز عشوائي للجلسة إن لم يكن موجودًا.
 if (!isset($_SESSION["csrf_token"])) {
     $_SESSION["csrf_token"] = bin2hex(random_bytes(32));
 }
-
 $csrfToken = $_SESSION["csrf_token"];
+
+// قراءة رسالة النجاح مرة واحدة ثم إزالتها من الجلسة.
 $success = $_SESSION["success"] ?? "";
 unset($_SESSION["success"]);
+
+// تهيئة بيانات الصفحة والحقول التي تبقى ظاهرة عند فشل التحقق.
 $name = "بلال";
-
-// قراءة الوظائف من قاعدة البيانات قبل معالجة الطلبات.
-$statement = $pdo->query(
-    "SELECT id, company, title, status, created_at
-     FROM jobs
-     ORDER BY id DESC"
-);
-
-$jobs = $statement->fetchAll();
-// استخدام معرّف قاعدة البيانات كمفتاح لكل وظيفة.
-$jobs = array_column($jobs, null, "id");
-
-// إعداد رسالة الخطأ وحقول الإضافة وقراءة نص البحث من العنوان.
 $error = "";
 $company = "";
 $title = "";
-$search = trim($_GET["search"] ?? "");
-
-// قائمة الحالات المسموحة للتحقق منها وعرضها في نموذج التعديل.
+$search = readText($_GET, "search");
+$jobs = [];
 $allowedStatuses = [
     "لم أقدم بعد",
     "قيد التجهيز",
@@ -38,153 +47,106 @@ $allowedStatuses = [
     "مقابلة"
 ];
 
-// استقبال النماذج التي تضيف البيانات أو تعدلها أو تحذفها.
-if ($_SERVER["REQUEST_METHOD"] === "POST") {
-  // رفض الطلب إذا كان رمز الحماية مفقودًا أو غير مطابق للجلسة.
-    $submittedToken = $_POST["csrf_token"] ?? "";
-
-    if (
-        !is_string($submittedToken) ||
-        !hash_equals($csrfToken, $submittedToken)
-    ) {
-        http_response_code(403);
-        exit("تعذر التحقق من الطلب. ارجع إلى الصفحة وحدّثها ثم حاول مجددًا.");
-    }
-    $action = $_POST["action"] ?? "";
-
-    // إضافة وظيفة بعد التحقق من الحقول المطلوبة وطول النصوص.
-    if ($action === "add_job") {
-        $company = trim($_POST["company"] ?? "");
-        $title = trim($_POST["title"] ?? "");
-
-        if ($company === "" || $title === "") {
-            $error = "يرجى إدخال اسم الشركة والمسمى الوظيفي.";
-        } elseif (
-            mb_strlen($company, "UTF-8") > 100 ||
-            mb_strlen($title, "UTF-8") > 150
-        ) {
-            $error = "اسم الشركة يجب ألا يتجاوز 100 حرف، والمسمى الوظيفي 150 حرفًا.";
-        } else {
-          
-    // حفظ الوظيفة الجديدة في قاعدة البيانات.
-    $statement = $pdo->prepare(
-        "INSERT INTO jobs (company, title, status)
-         VALUES (:company, :title, :status)"
-    );
-
-    $statement->execute([
-        "company" => $company,
-        "title" => $title,
-        "status" => "لم أقدم بعد"
-    ]);
-
-    // إبقاء الإضافة للجلسة مؤقتًا أثناء نقل التطبيق.
-            $jobs[] = [
-                "id" => (int) $pdo->lastInsertId(),
-                "company" => $company,
-                "title" => $title,
-                "status" => "لم أقدم بعد"
-            ];
-
-            
-            $_SESSION["success"] = "تمت إضافة الوظيفة بنجاح.";
-
-            // العودة بطلب جديد لمنع تكرار الإضافة عند تحديث الصفحة.
-            header("Location: /job-tracker/");
-            exit;
+// معالجة الطلبات وجلب القائمة مع إخفاء تفاصيل أخطاء قاعدة البيانات عن الزائر.
+try {
+    if ($_SERVER["REQUEST_METHOD"] === "POST") {
+        // التحقق من رمز الحماية قبل تنفيذ أي عملية تغير البيانات.
+        $submittedToken = $_POST["csrf_token"] ?? "";
+        if (!is_string($submittedToken) || !hash_equals($csrfToken, $submittedToken)) {
+            http_response_code(403);
+            exit("تعذر التحقق من الطلب. ارجع إلى الصفحة وحدّثها ثم حاول مجددًا.");
         }
 
-    // تعديل حالة وظيفة موجودة باستخدام حالة مسموحة فقط.
-    } elseif ($action === "update_status") {
-        $index = filter_var(
-            $_POST["job_index"] ?? "",
-            FILTER_VALIDATE_INT
-        );
-        $status = $_POST["status"] ?? "";
+        // تحديد العملية المطلوبة والبحث الذي سنعود إليه بعد نجاحها.
+        $action = readText($_POST, "action");
+        $returnSearch = readText($_POST, "search");
 
-        if (
-            $index === false ||
-            !isset($jobs[$index]) ||
-            !in_array($status, $allowedStatuses, true)
-        ) {
-            $error = "الوظيفة أو الحالة غير صحيحة.";
-        } else {
-            // تعديل حالة الصف المرتبط بالبطاقة في قاعدة البيانات.
-if (isset($jobs[$index]["id"])) {
-    $statement = $pdo->prepare(
-        "UPDATE jobs
-         SET status = :status
-         WHERE id = :id"
-    );
+        // إضافة وظيفة بعد التحقق من الحقول المطلوبة وحدود أطوالها.
+        if ($action === "add_job") {
+            $company = readText($_POST, "company");
+            $title = readText($_POST, "title");
 
-    $statement->execute([
-        "status" => $status,
-        "id" => $jobs[$index]["id"]
-    ]);
-}
-            $jobs[$index]["status"] = $status;
-            
-            $_SESSION["success"] = "تم تحديث حالة الوظيفة بنجاح.";
-
-            // الاحتفاظ بنص البحث عند العودة بعد تعديل الحالة.
-            $returnSearch = trim($_POST["search"] ?? "");
-            $redirectUrl = "/job-tracker/";
-            if ($returnSearch !== "") {
-                $redirectUrl .= "?search=" . rawurlencode($returnSearch);
+            if ($company === "" || $title === "") {
+                $error = "يرجى إدخال اسم الشركة والمسمى الوظيفي.";
+            } elseif (mb_strlen($company, "UTF-8") > 100 || mb_strlen($title, "UTF-8") > 150) {
+                $error = "اسم الشركة يجب ألا يتجاوز 100 حرف، والمسمى الوظيفي 150 حرفًا.";
+            } else {
+                // إرسال القيم منفصلة عن SQL باستخدام استعلام مجهز.
+                $statement = $pdo->prepare(
+                    "INSERT INTO jobs (company, title, status)
+                     VALUES (:company, :title, :status)"
+                );
+                $statement->execute([
+                    "company" => $company,
+                    "title" => $title,
+                    "status" => "لم أقدم بعد"
+                ]);
+                $_SESSION["success"] = "تمت إضافة الوظيفة بنجاح.";
+                redirectToJobs();
             }
-            header("Location: " . $redirectUrl);
-            exit;
-        }
 
-    // حذف وظيفة موجودة وإعادة ترتيب مفاتيح القائمة.
-    } elseif ($action === "delete_job") {
-        $index = filter_var(
-            $_POST["job_index"] ?? "",
-            FILTER_VALIDATE_INT
-        );
+        // التعديل والحذف يعتمدان على معرّف الصف الثابت بدل موضع المصفوفة.
+        } elseif ($action === "update_status" || $action === "delete_job") {
+            $jobId = filter_var(
+                readText($_POST, "job_id"),
+                FILTER_VALIDATE_INT,
+                ["options" => ["min_range" => 1]]
+            );
+            $status = readText($_POST, "status");
 
-        if ($index === false || !isset($jobs[$index])) {
-            $error = "الوظيفة غير موجودة.";
-        } else {
-            // حذف الصف المرتبط بالبطاقة من قاعدة البيانات.
-if (isset($jobs[$index]["id"])) {
-    $statement = $pdo->prepare(
-        "DELETE FROM jobs WHERE id = :id"
-    );
+            // رفض المعرّف غير الصحيح أو الحالة غير المسموحة.
+            if ($jobId === false) {
+                $error = "معرّف الوظيفة غير صحيح.";
+            } elseif ($action === "update_status" && !in_array($status, $allowedStatuses, true)) {
+                $error = "حالة الوظيفة غير صحيحة.";
+            } else {
+                // التأكد من وجود الصف وحجزه حتى تنتهي العملية الحالية.
+                $pdo->beginTransaction();
+                $statement = $pdo->prepare("SELECT id FROM jobs WHERE id = :id FOR UPDATE");
+                $statement->execute(["id" => $jobId]);
 
-    $statement->execute([
-        "id" => $jobs[$index]["id"]
-    ]);
-}
-            unset($jobs[$index]);
-           
-            
-            $_SESSION["success"] = "تم حذف الوظيفة بنجاح.";
+                if ($statement->fetchColumn() === false) {
+                    $pdo->rollBack();
+                    $error = "الوظيفة غير موجودة؛ ربما حُذفت من نافذة أخرى.";
+                } else {
+                    // تنفيذ التعديل أو الحذف على الصف المحدد فقط.
+                    if ($action === "update_status") {
+                        $statement = $pdo->prepare("UPDATE jobs SET status = :status WHERE id = :id");
+                        $statement->execute(["status" => $status, "id" => $jobId]);
+                        $message = "تم تحديث حالة الوظيفة بنجاح.";
+                    } else {
+                        $statement = $pdo->prepare("DELETE FROM jobs WHERE id = :id");
+                        $statement->execute(["id" => $jobId]);
+                        $message = "تم حذف الوظيفة بنجاح.";
+                    }
 
-            // الاحتفاظ بنص البحث عند العودة بعد الحذف.
-            $returnSearch = trim($_POST["search"] ?? "");
-            $redirectUrl = "/job-tracker/";
-            if ($returnSearch !== "") {
-                $redirectUrl .= "?search=" . rawurlencode($returnSearch);
+                    // اعتماد العملية قبل عرض رسالة نجاح وإعادة التوجيه.
+                    $pdo->commit();
+                    $_SESSION["success"] = $message;
+                    redirectToJobs($returnSearch);
+                }
             }
-            header("Location: " . $redirectUrl);
-            exit;
+        } else {
+            $error = "العملية غير معروفة.";
         }
-    } else {
-        $error = "العملية غير معروفة.";
     }
+
+    // قراءة القائمة مرة واحدة للعرض؛ لا نخزن الوظائف في الجلسة أو نكرر الاستعلام.
+    $statement = $pdo->query(
+        "SELECT id, company, title, status, created_at FROM jobs ORDER BY id DESC"
+    );
+    $jobs = $statement->fetchAll();
+} catch (PDOException $exception) {
+    // إلغاء العملية غير المكتملة وتسجيل التفاصيل في سجل الخادم فقط.
+    if ($pdo->inTransaction()) {
+        $pdo->rollBack();
+    }
+    error_log((string) $exception);
+    http_response_code(500);
+    $error = "تعذر إكمال العملية أو تحميل الوظائف. حاول مجددًا لاحقًا.";
 }
 
-// قراءة الوظائف المحفوظة في قاعدة البيانات.
-$statement = $pdo->query(
-    "SELECT id, company, title, status, created_at
-     FROM jobs
-     ORDER BY id DESC"
-);
-
-$databaseJobs = $statement->fetchAll();
-
-// تصفية الوظائف بالبحث مع إبقاء مفاتيحها الأصلية للتعديل والحذف.
+// تصفية قائمة العرض باسم الشركة أو المسمى دون تغيير بيانات قاعدة البيانات.
 $filteredJobs = $jobs;
 if ($search !== "") {
     $filteredJobs = array_filter(
@@ -204,8 +166,6 @@ if ($search !== "") {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>متتبع طلبات الوظائف</title>
-
-
 
     <!-- تنسيق الصفحة والبطاقات والنماذج والرسائل. -->
     <style>
@@ -315,11 +275,11 @@ if ($search !== "") {
     <h2>إضافة وظيفة</h2>
     <form method="post" class="add-job-form">
         <input type="hidden" name="action" value="add_job">
-<input
-    type="hidden"
-    name="csrf_token"
-    value="<?php echo htmlspecialchars($csrfToken, ENT_QUOTES, "UTF-8"); ?>"
->
+        <input
+            type="hidden"
+            name="csrf_token"
+            value="<?php echo htmlspecialchars($csrfToken, ENT_QUOTES, "UTF-8"); ?>"
+        >
 
         <p>
             <label for="company">اسم الشركة:</label>
@@ -382,14 +342,11 @@ if ($search !== "") {
         <p>لا توجد وظائف مطابقة للبحث.</p>
     <?php endif; ?>
 
-    <!-- عرض بطاقة لكل وظيفة مع الحفاظ على مفتاحها الأصلي. -->
-    <?php foreach ($filteredJobs as $index => $job): ?>
+    <!-- عرض بطاقة لكل وظيفة باستخدام معرّف قاعدة البيانات الثابت. -->
+    <?php foreach ($filteredJobs as $job): ?>
         <div class="job-card">
-<p>معرّف الوظيفة: <?php echo (int) $job["id"]; ?></p>
-<?php if (isset($job["id"])): ?>
- 
-<?php endif; ?>
-            <h3><?php echo htmlspecialchars($job["company"], ENT_QUOTES, "UTF-8"); ?></h3>
+            <p>معرّف الوظيفة: <?php echo (int) $job["id"]; ?></p>
+<h3><?php echo htmlspecialchars($job["company"], ENT_QUOTES, "UTF-8"); ?></h3>
             <p>المسمى الوظيفي: <?php echo htmlspecialchars($job["title"], ENT_QUOTES, "UTF-8"); ?></p>
             <p>حالة الطلب: <?php echo htmlspecialchars($job["status"], ENT_QUOTES, "UTF-8"); ?></p>
 
@@ -409,20 +366,20 @@ if ($search !== "") {
             <!-- نموذج تعديل الحالة وإرسال نص البحث للعودة إلى نتائجه. -->
             <form method="post">
                 <input type="hidden" name="action" value="update_status">
-<input
-    type="hidden"
-    name="csrf_token"
-    value="<?php echo htmlspecialchars($csrfToken, ENT_QUOTES, "UTF-8"); ?>"
->
-               <input type="hidden" name="job_index" value="<?php echo (int) $job["id"]; ?>">
+                <input
+                    type="hidden"
+                    name="csrf_token"
+                    value="<?php echo htmlspecialchars($csrfToken, ENT_QUOTES, "UTF-8"); ?>"
+                >
+                <input type="hidden" name="job_id" value="<?php echo (int) $job["id"]; ?>">
                 <input
                     type="hidden"
                     name="search"
                     value="<?php echo htmlspecialchars($search, ENT_QUOTES, "UTF-8"); ?>"
                 >
 
-                <label for="status-<?php echo $index; ?>">تغيير الحالة:</label>
-                <select name="status" id="status-<?php echo $index; ?>">
+                <label for="status-<?php echo (int) $job["id"]; ?>">تغيير الحالة:</label>
+                <select name="status" id="status-<?php echo (int) $job["id"]; ?>">
                     <?php foreach ($allowedStatuses as $option): ?>
                         <option
                             value="<?php echo htmlspecialchars($option, ENT_QUOTES, "UTF-8"); ?>"
@@ -439,12 +396,12 @@ if ($search !== "") {
             <!-- نموذج الحذف مع تأكيد المستخدم والاحتفاظ بنص البحث. -->
             <form method="post" onsubmit="return confirm('هل تريد حذف هذه الوظيفة؟');">
                 <input type="hidden" name="action" value="delete_job">
-<input
-    type="hidden"
-    name="csrf_token"
-    value="<?php echo htmlspecialchars($csrfToken, ENT_QUOTES, "UTF-8"); ?>"
->
-               <input type="hidden" name="job_index" value="<?php echo (int) $job["id"]; ?>">
+                <input
+                    type="hidden"
+                    name="csrf_token"
+                    value="<?php echo htmlspecialchars($csrfToken, ENT_QUOTES, "UTF-8"); ?>"
+                >
+                <input type="hidden" name="job_id" value="<?php echo (int) $job["id"]; ?>">
                 <input
                     type="hidden"
                     name="search"
