@@ -23,6 +23,8 @@ A beginner PHP project for tracking job applications.
 1. Install XAMPP.
 - Start Apache and MySQL from the XAMPP Control Panel.
 - Create a database named `job_tracker` using phpMyAdmin.
+- Select the `job_tracker` database in phpMyAdmin.
+- Open the Import tab and import `schema.sql` to create the jobs table.
 - Copy `db.example.php` to `db.php`.
 - Set your local database username and password in `db.php`.
 2. Place the project folder in `C:\xampp\htdocs\job-tracker`.
