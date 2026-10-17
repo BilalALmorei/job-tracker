@@ -295,6 +295,7 @@ $filteredJobs = array_filter(
 
         /* التنسيق المشترك لحقول النص وقوائم الاختيار. */
         input[type="text"],
+        input[type="url"], 
         select {
             padding: 8px;
             border: 1px solid #bbb;
@@ -358,10 +359,16 @@ $filteredJobs = array_filter(
             margin-bottom: 6px;
         }
 
-        .add-job-form input[type="text"] {
+        .add-job-form input[type="text"],
+        .add-job-form input[type="url"] {
             width: 100%;
             box-sizing: border-box;
         }
+
+/* عرض الروابط من اليسار لليمين داخل الحقل. */
+input[type="url"] {
+    text-align: left;
+}
 
     /* إظهار حالة الطلب داخل شارة صغيرة. */
 .status-badge {
@@ -450,6 +457,7 @@ $filteredJobs = array_filter(
     <label for="url">رابط إعلان الوظيفة:</label>
     <input
         type="url"
+        dir="ltr"
         id="url"
         name="url"
         value="<?php echo htmlspecialchars($url, ENT_QUOTES, "UTF-8"); ?>"
