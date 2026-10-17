@@ -166,14 +166,23 @@ if (isset($jobs[$index]["id"])) {
             
             $_SESSION["success"] = "تم تحديث حالة الوظيفة بنجاح.";
 
-            // الاحتفاظ بنص البحث عند العودة بعد تعديل الحالة.
-            $returnSearch = trim($_POST["search"] ?? "");
-            $redirectUrl = "/job-tracker/";
-            if ($returnSearch !== "") {
-                $redirectUrl .= "?search=" . rawurlencode($returnSearch);
-            }
-            header("Location: " . $redirectUrl);
-            exit;
+            // قراءة البحث وفلتر الحالة للعودة إلى النتائج نفسها.
+$returnSearch = readText($_POST, "search");
+$returnStatusFilter = readText($_POST, "status_filter");
+
+// قبول الحالات المعروفة فقط.
+if (!in_array($returnStatusFilter, $allowedStatuses, true)) {
+    $returnStatusFilter = "";
+}
+
+// تجهيز قيم الرابط وترميز العربية والمسافات تلقائيًا.
+$query = http_build_query([
+    "search" => $returnSearch,
+    "status_filter" => $returnStatusFilter
+]);
+
+header("Location: /job-tracker/?" . $query);
+exit;
         }
 
     // حذف وظيفة موجودة وإعادة ترتيب مفاتيح القائمة.
@@ -201,14 +210,23 @@ if (isset($jobs[$index]["id"])) {
             
             $_SESSION["success"] = "تم حذف الوظيفة بنجاح.";
 
-            // الاحتفاظ بنص البحث عند العودة بعد الحذف.
-            $returnSearch = trim($_POST["search"] ?? "");
-            $redirectUrl = "/job-tracker/";
-            if ($returnSearch !== "") {
-                $redirectUrl .= "?search=" . rawurlencode($returnSearch);
-            }
-            header("Location: " . $redirectUrl);
-            exit;
+            // الاحتفاظ بالبحث وفلتر الحالة بعد الحذف.
+$returnSearch = readText($_POST, "search");
+$returnStatusFilter = readText($_POST, "status_filter");
+
+// قبول الحالات المعروفة فقط.
+if (!in_array($returnStatusFilter, $allowedStatuses, true)) {
+    $returnStatusFilter = "";
+}
+
+// بناء رابط العودة إلى النتائج نفسها.
+$query = http_build_query([
+    "search" => $returnSearch,
+    "status_filter" => $returnStatusFilter
+]);
+
+header("Location: /job-tracker/?" . $query);
+exit;
         }
     } else {
         $error = "العملية غير معروفة.";
@@ -225,16 +243,23 @@ $statement = $pdo->query(
 $databaseJobs = $statement->fetchAll();
 
 // تصفية الوظائف بالبحث مع إبقاء مفاتيحها الأصلية للتعديل والحذف.
-$filteredJobs = $jobs;
-if ($search !== "") {
-    $filteredJobs = array_filter(
-        $jobs,
-        function ($job) use ($search) {
-            return mb_stripos($job["company"], $search, 0, "UTF-8") !== false
-                || mb_stripos($job["title"], $search, 0, "UTF-8") !== false;
-        }
-    );
-}
+// عرض الوظائف التي تطابق نص البحث والحالة المختارة معًا.
+$filteredJobs = array_filter(
+    $jobs,
+    function ($job) use ($search, $statusFilter) {
+        // البحث الفارغ يقبل جميع الوظائف.
+        $matchesSearch = $search === ""
+            || mb_stripos($job["company"], $search, 0, "UTF-8") !== false
+            || mb_stripos($job["title"], $search, 0, "UTF-8") !== false;
+
+        // الحالة الفارغة تعني اختيار جميع الحالات.
+        $matchesStatus = $statusFilter === ""
+            || $job["status"] === $statusFilter;
+
+        // يجب أن يتحقق الشرطان لعرض الوظيفة.
+        return $matchesSearch && $matchesStatus;
+    }
+);
 ?>
 
 <!DOCTYPE html>
@@ -578,6 +603,13 @@ $hasValidUrl = is_string($jobUrl)
                     value="<?php echo htmlspecialchars($search, ENT_QUOTES, "UTF-8"); ?>"
                 >
 
+                <!-- إرسال فلتر الحالة للعودة إلى النتائج نفسها بعد الحفظ. -->
+<input
+    type="hidden"
+    name="status_filter"
+    value="<?php echo htmlspecialchars($statusFilter, ENT_QUOTES, "UTF-8"); ?>"
+>
+
                 <label for="status-<?php echo $index; ?>">تغيير الحالة:</label>
                 <select name="status" id="status-<?php echo $index; ?>">
                     <?php foreach ($allowedStatuses as $option): ?>
@@ -607,6 +639,13 @@ $hasValidUrl = is_string($jobUrl)
                     name="search"
                     value="<?php echo htmlspecialchars($search, ENT_QUOTES, "UTF-8"); ?>"
                 >
+
+                <!-- الاحتفاظ بفلتر الحالة بعد الحذف. -->
+<input
+    type="hidden"
+    name="status_filter"
+    value="<?php echo htmlspecialchars($statusFilter, ENT_QUOTES, "UTF-8"); ?>"
+>
 
                 <button type="submit" class="delete-button">حذف الوظيفة</button>
             </form>

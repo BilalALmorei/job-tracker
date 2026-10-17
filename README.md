@@ -10,6 +10,8 @@ A beginner PHP project for tracking job applications.
 - Search by company name or job title.
 - Display success and validation messages.
 - Optionally save and open a job advertisement URL.
+- Filter jobs by application status and combine the filter with text search.
+- Preserve search and status filters after updating or deleting a job.
 
 ## Technologies
 
