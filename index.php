@@ -270,7 +270,7 @@ $filteredJobs = array_filter(
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>متتبع طلبات الوظائف</title>
         <!-- تحميل تنسيق الصفحة من ملف مستقل. -->
-    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="assets/style.css">
 
 
 
